@@ -650,7 +650,7 @@ static void pl011_reset(DeviceState *dev)
     s->read_trigger = 1;
     s->ifl = 0x12;
     s->cr = 0x300;
-    s->flags = 0;
+    s->flags = 0 | PL011_FLAG_CTS;
     pl011_reset_rx_fifo(s);
     pl011_reset_tx_fifo(s);
 }
