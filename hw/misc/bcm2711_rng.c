@@ -1,0 +1,153 @@
+/*
+ * BCM2711 Random Number Generator emulation
+ *
+ * Copyright (C) 2017 Marcin Chojnacki <marcinch7@gmail.com>
+ *
+ * This work is licensed under the terms of the GNU GPL, version 2 or later.
+ * See the COPYING file in the top-level directory.
+ */
+
+#include "qemu/osdep.h"
+#include "qemu/log.h"
+#include "qemu/guest-random.h"
+#include "qemu/module.h"
+#include "hw/misc/bcm2711_rng.h"
+#include "migration/vmstate.h"
+
+static uint32_t get_random_bytes(void)
+{
+    uint32_t res;
+
+    /*
+     * On failure we don't want to return the guest a non-random
+     * value in case they're really using it for cryptographic
+     * purposes, so the best we can do is die here.
+     * This shouldn't happen unless something's broken.
+     * In theory we could implement this device's full FIFO
+     * and interrupt semantics and then just stop filling the
+     * FIFO. That's a lot of work, though, so we assume any
+     * errors are systematic problems and trust that if we didn't
+     * fail as the guest inited then we won't fail later on
+     * mid-run.
+     */
+    qemu_guest_getrandom_nofail(&res, sizeof(res));
+    return res;
+}
+
+static uint64_t bcm2711_rng_read(void *opaque, hwaddr offset,
+                                 unsigned size)
+{
+    BCM2711RngState *s = (BCM2711RngState *)opaque;
+    uint32_t res = 0;
+
+    assert(size == 4);
+
+    switch (offset) {
+    case 0x0:    /* rng_ctrl */
+        res = s->rng_ctrl;
+        break;
+    // case 0x4:    /* rng_status */
+    //     res = s->rng_status | (1 << 24);
+    //     break;
+    case 0xC:    /* rng total bit count */
+        res = 128;
+        break;
+    case 0x20:    /* rng_data */
+        res = get_random_bytes();
+        break;
+    case 0x24:    /* rng fifo count */
+        res = 16;
+        break;
+
+    default:
+        qemu_log_mask(LOG_GUEST_ERROR,
+                      "bcm2711_rng_read: Bad offset %x\n",
+                      (int)offset);
+        res = 0;
+        break;
+    }
+
+    return res;
+}
+
+static void bcm2711_rng_write(void *opaque, hwaddr offset,
+                              uint64_t value, unsigned size)
+{
+    BCM2711RngState *s = (BCM2711RngState *)opaque;
+
+    assert(size == 4);
+
+    switch (offset) {
+    case 0x0:    /* rng_ctrl */
+        s->rng_ctrl = value;
+        break;
+    // case 0x4:    /* rng_status */
+    //     /* we shouldn't let the guest write to bits [31..20] */
+    //     s->rng_status &= ~0xFFFFF;        /* clear 20 lower bits */
+    //     s->rng_status |= value & 0xFFFFF; /* set them to new value */
+    //     break;
+
+    default:
+        qemu_log_mask(LOG_GUEST_ERROR,
+                      "bcm2711_rng_write: Bad offset %x\n",
+                      (int)offset);
+        break;
+    }
+}
+
+static const MemoryRegionOps bcm2711_rng_ops = {
+    .read = bcm2711_rng_read,
+    .write = bcm2711_rng_write,
+    .endianness = DEVICE_NATIVE_ENDIAN,
+};
+
+static const VMStateDescription vmstate_bcm2711_rng = {
+    .name = TYPE_BCM2711_RNG,
+    .version_id = 1,
+    .minimum_version_id = 1,
+    .fields = (const VMStateField[]) {
+        VMSTATE_UINT32(rng_ctrl, BCM2711RngState),
+        VMSTATE_UINT32(rng_status, BCM2711RngState),
+        VMSTATE_END_OF_LIST()
+    }
+};
+
+static void bcm2711_rng_init(Object *obj)
+{
+    BCM2711RngState *s = BCM2711_RNG(obj);
+
+    memory_region_init_io(&s->iomem, obj, &bcm2711_rng_ops, s,
+                          TYPE_BCM2711_RNG, 0x28);
+    sysbus_init_mmio(SYS_BUS_DEVICE(s), &s->iomem);
+}
+
+static void bcm2711_rng_reset(DeviceState *dev)
+{
+    BCM2711RngState *s = BCM2711_RNG(dev);
+
+    s->rng_ctrl = 0;
+    s->rng_status = 0;
+}
+
+static void bcm2711_rng_class_init(ObjectClass *klass, void *data)
+{
+    DeviceClass *dc = DEVICE_CLASS(klass);
+
+    device_class_set_legacy_reset(dc, bcm2711_rng_reset);
+    dc->vmsd = &vmstate_bcm2711_rng;
+}
+
+static const TypeInfo bcm2711_rng_info = {
+    .name          = TYPE_BCM2711_RNG,
+    .parent        = TYPE_SYS_BUS_DEVICE,
+    .instance_size = sizeof(BCM2711RngState),
+    .class_init    = bcm2711_rng_class_init,
+    .instance_init = bcm2711_rng_init,
+};
+
+static void bcm2711_rng_register_types(void)
+{
+    type_register_static(&bcm2711_rng_info);
+}
+
+type_init(bcm2711_rng_register_types)

@@ -54,6 +54,7 @@ DeviceState *pl011_create(hwaddr addr, qemu_irq irq, Chardev *chr)
 #define PL011_FLAG_RXFF 0x40
 #define PL011_FLAG_TXFF 0x20
 #define PL011_FLAG_RXFE 0x10
+// a267chen: busy is not implemented.
 #define PL011_FLAG_DCD  0x04
 #define PL011_FLAG_DSR  0x02
 #define PL011_FLAG_CTS  0x01
@@ -242,6 +243,8 @@ static void pl011_write_txdata(PL011State *s, uint8_t data)
     pl011_loopback_tx(s, data);
     s->int_level |= INT_TX;
     pl011_update(s);
+
+    // a267chen: handle 
 }
 
 static uint32_t pl011_read_rxdata(PL011State *s)

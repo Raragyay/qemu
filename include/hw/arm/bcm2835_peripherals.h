@@ -20,6 +20,7 @@
 #include "hw/or-irq.h"
 #include "hw/intc/bcm2835_ic.h"
 #include "hw/misc/bcm2835_property.h"
+#include "hw/misc/bcm2711_rng.h"
 #include "hw/misc/bcm2835_rng.h"
 #include "hw/misc/bcm2835_mbox.h"
 #include "hw/misc/bcm2835_mphi.h"
@@ -60,6 +61,7 @@ struct BCMSocPeripheralBaseState {
     BCM2835CprmanState cprman;
     PL011State uart0;
     PL011State uart3;
+    BCM2711RngState rng;
     BCM2835AuxState aux;
     BCM2835FBState fb;
     BCM2835DMAState dma;

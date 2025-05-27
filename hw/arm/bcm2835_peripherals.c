@@ -89,6 +89,9 @@ static void raspi_peripherals_base_init(Object *obj)
     memory_region_init(&s->mbox_mr, obj, "bcm2835-mbox",
                        MBOX_CHAN_COUNT << MBOX_AS_CHAN_SHIFT);
 
+    /* rng */
+    object_initialize_child(obj, "rng", &s->rng, TYPE_BCM2711_RNG);
+
     /* Interrupt Controller */
     object_initialize_child(obj, "ic", &s->ic, TYPE_BCM2835_IC);
 
@@ -317,6 +320,16 @@ void bcm_soc_peripherals_common_realize(DeviceState *dev, Error **errp)
     sysbus_connect_irq(SYS_BUS_DEVICE(&s->systmr), 3,
         qdev_get_gpio_in_named(DEVICE(&s->ic), BCM2835_IC_GPU_IRQ,
                                INTERRUPT_TIMER3));
+
+    /* rng */
+
+    /* Random Number Generator */
+    if (!sysbus_realize(SYS_BUS_DEVICE(&s->rng), errp)) {
+        return;
+    }
+    memory_region_add_subregion(
+        &s->peri_mr, RNG_OFFSET,
+        sysbus_mmio_get_region(SYS_BUS_DEVICE(&s->rng), 0));
 
     /* UART0 */
     qdev_prop_set_chr(DEVICE(&s->uart0), "chardev", serial_hd(0));
